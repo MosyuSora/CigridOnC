@@ -121,26 +121,28 @@ FuncDef Parser::parseFuncDef(const Type& retType, const std::string& name) {
 }
 
 // Parse an extern declaration given the return type and name.  For extern
-// declarations we only record the parameter types (names are unused).
+// declarations we preserve the parameter types and any optional names.
 ExternDecl Parser::parseExtern(const Type& retType, const std::string& name) {
-    // parse parameter list but only record types
+    // parse parameter list and keep both types and optional names
     std::vector<FuncParam> params;
     expect(TokenType::LParen);
-    std::vector<Type> paramTypes;
     if (tok.type != TokenType::RParen) {
         Type t = parseType();
-        paramTypes.push_back(t);
+        std::string paramName;
         if (tok.type == TokenType::Ident) {
-            // Parameter name present in prototype; ignore it.
+            paramName = tok.text;
             advance();
         }
+        params.emplace_back(t, paramName);
         while (tok.type == TokenType::Comma) {
             advance();
             t = parseType();
-            paramTypes.push_back(t);
+            paramName.clear();
             if (tok.type == TokenType::Ident) {
+                paramName = tok.text;
                 advance();
             }
+            params.emplace_back(t, paramName);
         }
     }
     expect(TokenType::RParen);
@@ -148,7 +150,7 @@ ExternDecl Parser::parseExtern(const Type& retType, const std::string& name) {
     ExternDecl ex;
     ex.type = retType;
     ex.name = name;
-    ex.paramTypes = paramTypes;
+    ex.params = params;
     return ex;
 }
 

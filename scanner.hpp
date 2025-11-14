@@ -125,7 +125,7 @@ private:
     char getChar();            // consume a character and update line number
     char peekChar() const;     // look at the current character
     void skipWhitespaceAndComments();
-    std::string readNumber();
+    std::string readNumber(int startLine);
     std::string readIdent();
     std::string readCharLiteral();
     std::string readStringLiteral();

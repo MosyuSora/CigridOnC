@@ -377,22 +377,13 @@ Ptr<Stmt> Parser::parseExprOrAssignStmt() {
         Ptr<Expr> rhs = std::make_shared<EBinOp>(inc ? "+" : "-", std::make_shared<EVar>(name), std::make_shared<EInt>(1));
         return std::make_shared<SVarAssign>(name, rhs);
     }
-    // We need to parse a potential assignment or array assignment.  We'll
-    // first parse a postfix expression (which includes array access).
-    // But for assignment we need to know if the left hand side is a
-    // simple variable or array access.  We'll remember the initial token.
-    // If the statement is of form ident ++ or ident -- (postfix) then
-    // convert to assignment.
-    // Save start position: if we start with an ident we attempt to parse assignment.
+    // We need to parse a potential assignment or array/field assignment or a
+    // generic expression statement starting with an identifier.
     if (tok.type == TokenType::Ident) {
-        // store name for potential assignment
         std::string baseName = tok.text;
-        Token nextTok = sc.peek();
-        // handle assignment or array assignment
-        // We need to check if nextTok is LBracket or Dot or Assign or PlusPlus or MinusMinus.
-        // If nextTok is LBracket or Dot, we parse array access and then check for '=' or '++'/'--'.
         advance();
-        // If followed by '(', this is a function call used as a statement.
+
+        // Function call used as a statement.
         if (tok.type == TokenType::LParen) {
             advance();
             std::vector<Ptr<Expr>> args;
@@ -407,127 +398,76 @@ Ptr<Stmt> Parser::parseExprOrAssignStmt() {
             expect(TokenType::Semicolon);
             return std::make_shared<SExpr>(std::make_shared<ECall>(baseName, args));
         }
-        // Build left expression: either simple variable or array access
-        // We'll maintain variables: bool isArray; string arrayName; Ptr<Expr> index; string field
-        bool isArrayAssign = false;
-        std::string arrayName;
+
+        // Parse optional indexing and/or field access.
         Ptr<Expr> indexExpr;
         std::string field;
-        // parse zero or more postfix operations for array/field access
+        bool hasIndex = false;
+        bool hasField = false;
+
+        auto parseFieldName = [this]() -> std::string {
+            if (tok.type != TokenType::Ident) {
+                throw ParseError("expected field name after '.'", tok.line);
+            }
+            std::string fname = tok.text;
+            advance();
+            return fname;
+        };
+
         if (tok.type == TokenType::LBracket) {
-            // array index
-            isArrayAssign = true;
-            arrayName = baseName;
-            advance(); // consume '['
+            hasIndex = true;
+            advance();
             indexExpr = parseExpr();
             expect(TokenType::RBracket);
-            // optional .field
-            if (tok.type == TokenType::Dot) {
-                advance();
-                if (tok.type != TokenType::Ident) {
-                    throw ParseError("expected field name after '.'", tok.line);
-                }
-                field = tok.text;
-                advance();
-            }
         }
-        // Now check for postfix ++/-- or assignment '='
+
+        if (tok.type == TokenType::Dot || tok.type == TokenType::Arrow) {
+            advance();
+            field = parseFieldName();
+            hasField = true;
+        }
+
+        auto buildLHSExpr = [&]() -> Ptr<Expr> {
+            if (hasIndex || hasField) {
+                return std::make_shared<EArrayAccess>(baseName, indexExpr, field);
+            }
+            return std::make_shared<EVar>(baseName);
+        };
+
+        bool useArrayAssign = hasIndex || hasField;
+
         if (tok.type == TokenType::PlusPlus || tok.type == TokenType::MinusMinus) {
             bool inc = (tok.type == TokenType::PlusPlus);
             advance();
             expect(TokenType::Semicolon);
-            // x++ or a[i].x++ becomes assignment x = x + 1 or a[i].x = a[i].x + 1
-            Ptr<Expr> rhs;
-            if (isArrayAssign) {
-                // build EArrayAccess
-                auto leftExpr = std::make_shared<EArrayAccess>(arrayName, indexExpr, field);
-                rhs = std::make_shared<EBinOp>(inc ? "+" : "-", leftExpr, std::make_shared<EInt>(1));
-                return std::make_shared<SArrayAssign>(arrayName, indexExpr, field, rhs);
-            } else {
-                rhs = std::make_shared<EBinOp>(inc ? "+" : "-", std::make_shared<EVar>(baseName), std::make_shared<EInt>(1));
-                return std::make_shared<SVarAssign>(baseName, rhs);
+            Ptr<Expr> lhsExpr = buildLHSExpr();
+            Ptr<Expr> rhs = std::make_shared<EBinOp>(inc ? "+" : "-", lhsExpr, std::make_shared<EInt>(1));
+            if (useArrayAssign) {
+                return std::make_shared<SArrayAssign>(baseName, indexExpr, field, rhs);
             }
+            return std::make_shared<SVarAssign>(baseName, rhs);
         }
+
         if (tok.type == TokenType::Assign) {
             advance();
             Ptr<Expr> rhs = parseExpr();
             expect(TokenType::Semicolon);
-            if (isArrayAssign) {
-                return std::make_shared<SArrayAssign>(arrayName, indexExpr, field, rhs);
-            } else {
-                return std::make_shared<SVarAssign>(baseName, rhs);
+            if (useArrayAssign) {
+                return std::make_shared<SArrayAssign>(baseName, indexExpr, field, rhs);
             }
+            return std::make_shared<SVarAssign>(baseName, rhs);
         }
-        // If we reached here, it's not an assignment; treat as expression statement.
-        // We need to reconstruct the expression we partially consumed.  We'll
-        // create an EVar/EArrayAccess representing the left side and then
-        // continue parsing the rest of the expression normally by
-        // combining it with parseExpr (starting from current token).  To
-        // reconstruct, we'll create a base expression and then call
-        // parsePostfix to handle any further array access on it (but we
-        // already consumed one level).  For simplicity we build the
-        // expression we know and then add further operations by parsing
-        // parseExpr from this state and combining with the saved expression
-        // using our precedence rules.
-        // Rewind not possible easily; we will instead build an expression
-        // from baseName/arrayName/indexExpr/field and then treat the
-        // remainder as parseExpr and add it if binary operator found.
-        Ptr<Expr> lhs;
-        if (isArrayAssign) {
-            lhs = std::make_shared<EArrayAccess>(arrayName, indexExpr, field);
-        } else {
-            lhs = std::make_shared<EVar>(baseName);
-        }
-        // parse any remaining expression tail.  We'll treat lhs as the
-        // leftmost part and parse binary operators normally by parsing
-        // from parseOrOr and then combining.  Because we've already
-        // consumed part of the expression, we'll start at the top of
-        // precedence by parsing parseOrOr, but we must treat lhs as
-        // current left side.  To handle this nicely, we write a small
-        // helper that parses the rest of the expression starting with
-        // parseOrOr and returns an expression.  We'll create a helper
-        // function inline here.
-        auto parseRHS = [this]() -> Ptr<Expr> {
-            return parseExpr();
-        };
-        // Combine lhs with rest if there is any.  If the next token is
-        // semicolon, we just use lhs.  Otherwise we parse the rest and
-        // then create a binary expression accordingly.  Our parseExpr
-        // will read the next operators and build proper AST, using lhs
-        // as the first operand.
-        Ptr<Expr> expr = lhs;
-        // To integrate lhs into parseExpr, we cannot easily feed it as
-        // initial value; therefore we parse the full expression as if
-        // starting fresh and then at the end we need to combine lhs and
-        // the parsed expression.  Instead we treat this entire branch as
-        // simple expression statement by pre‑pending the consumed part
-        // into a textual expression representation.  For simplicity and
-        // given this is only for expression statements, we'll not
-        // attempt to combine; instead we'll treat this as an error if
-        // there are more tokens besides ';'.  We'll assume the simple
-        // case where expression is just lhs; any binary operator after
-        // variable or array access should be parsed via parseExprOrAssignStmt
-        // when starting from the beginning.  So if next token is not
-        // semicolon we throw.
-        if (tok.type != TokenType::Semicolon) {
-            // There is more expression after variable or array access.  We
-            // rebuild by treating lhs as beginning of parseExpr.  We'll
-            // use a trick: push back lhs into a stack and then call
-            // parseExpr to parse the remainder and then combine.  To
-            // avoid complexity, we treat this as expression starting
-            // again by setting up a special parse state: we will
-            // combine manually for the simple binary operator case.
-        }
-        // For now just treat as simple expression statement
+
+        Ptr<Expr> expr = buildLHSExpr();
         expect(TokenType::Semicolon);
-        return std::make_shared<SExpr>(lhs);
+        return std::make_shared<SExpr>(expr);
     }
-    // Not starting with ident: parse general expression statement
+
+    // Fallback: parse a generic expression statement.
     Ptr<Expr> e = parseExpr();
     expect(TokenType::Semicolon);
     return std::make_shared<SExpr>(e);
 }
-
 // Parse a for loop: for(init; cond; incr) stmt.  We desugar it into
 // a scope containing the initialiser and a while loop whose body
 // contains the original body followed by the increment.
@@ -794,24 +734,41 @@ Ptr<Expr> Parser::parsePostfix() {
             advance();
             Ptr<Expr> index = parseExpr();
             expect(TokenType::RBracket);
-            std::string field;
-            if (tok.type == TokenType::Dot) {
+            std::string fieldName;
+            if (tok.type == TokenType::Dot || tok.type == TokenType::Arrow) {
                 advance();
                 if (tok.type != TokenType::Ident) {
                     throw ParseError("expected field name", tok.line);
                 }
-                field = tok.text;
+                fieldName = tok.text;
                 advance();
             }
-            // expr must be EVar or EArrayAccess to extract name
-            // We treat only simple variable names on left
             if (auto v = std::dynamic_pointer_cast<EVar>(expr)) {
-                expr = std::make_shared<EArrayAccess>(v->name, index, field);
+                expr = std::make_shared<EArrayAccess>(v->name, index, fieldName);
             } else if (auto a = std::dynamic_pointer_cast<EArrayAccess>(expr)) {
-                // nested array: not supported
-                throw ParseError("nested array access not supported", tok.line);
+                if (!a->field.empty()) {
+                    throw ParseError("nested array access not supported", tok.line);
+                }
+                expr = std::make_shared<EArrayAccess>(a->name, a->index, fieldName);
             } else {
                 throw ParseError("invalid array base", tok.line);
+            }
+        } else if (tok.type == TokenType::Dot || tok.type == TokenType::Arrow) {
+            advance();
+            if (tok.type != TokenType::Ident) {
+                throw ParseError("expected field name", tok.line);
+            }
+            std::string fieldName = tok.text;
+            advance();
+            if (auto v = std::dynamic_pointer_cast<EVar>(expr)) {
+                expr = std::make_shared<EArrayAccess>(v->name, Ptr<Expr>(), fieldName);
+            } else if (auto a = std::dynamic_pointer_cast<EArrayAccess>(expr)) {
+                if (!a->field.empty()) {
+                    throw ParseError("nested field access not supported", tok.line);
+                }
+                expr = std::make_shared<EArrayAccess>(a->name, a->index, fieldName);
+            } else {
+                throw ParseError("invalid field access", tok.line);
             }
         } else {
             break;

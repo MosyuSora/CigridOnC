@@ -130,10 +130,17 @@ ExternDecl Parser::parseExtern(const Type& retType, const std::string& name) {
     if (tok.type != TokenType::RParen) {
         Type t = parseType();
         paramTypes.push_back(t);
+        if (tok.type == TokenType::Ident) {
+            // Parameter name present in prototype; ignore it.
+            advance();
+        }
         while (tok.type == TokenType::Comma) {
             advance();
             t = parseType();
             paramTypes.push_back(t);
+            if (tok.type == TokenType::Ident) {
+                advance();
+            }
         }
     }
     expect(TokenType::RParen);
@@ -385,6 +392,21 @@ Ptr<Stmt> Parser::parseExprOrAssignStmt() {
         // We need to check if nextTok is LBracket or Dot or Assign or PlusPlus or MinusMinus.
         // If nextTok is LBracket or Dot, we parse array access and then check for '=' or '++'/'--'.
         advance();
+        // If followed by '(', this is a function call used as a statement.
+        if (tok.type == TokenType::LParen) {
+            advance();
+            std::vector<Ptr<Expr>> args;
+            if (tok.type != TokenType::RParen) {
+                args.push_back(parseExpr());
+                while (tok.type == TokenType::Comma) {
+                    advance();
+                    args.push_back(parseExpr());
+                }
+            }
+            expect(TokenType::RParen);
+            expect(TokenType::Semicolon);
+            return std::make_shared<SExpr>(std::make_shared<ECall>(baseName, args));
+        }
         // Build left expression: either simple variable or array access
         // We'll maintain variables: bool isArray; string arrayName; Ptr<Expr> index; string field
         bool isArrayAssign = false;
@@ -882,8 +904,16 @@ ASTProgram Parser::parseProgram() {
             }
             std::string name = tok.text;
             advance();
-            ExternDecl ex = parseExtern(retType, name);
-            prog.externs.push_back(ex);
+            if (tok.type == TokenType::LParen) {
+                ExternDecl ex = parseExtern(retType, name);
+                prog.externs.push_back(ex);
+            } else {
+                expect(TokenType::Semicolon);
+                GVarDecl decl;
+                decl.type = retType;
+                decl.name = name;
+                prog.globals.push_back(decl);
+            }
             continue;
         }
         if (tok.type == TokenType::Kw_struct) {

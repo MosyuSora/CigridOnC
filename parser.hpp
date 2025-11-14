@@ -1,6 +1,6 @@
 #pragma once
 
-#include "lexer.hpp"
+#include "scanner.hpp"
 #include "ast.hpp"
 
 namespace cigrid {
@@ -11,11 +11,11 @@ namespace cigrid {
 ASTProgram parse_file(const std::string& filename);
 
 // Parser encapsulates the logic of turning a token stream produced by
-// the Lexer into an AST.  It maintains the current token and provides
+// the Scanner into an AST.  It maintains the current token and provides
 // a number of helper methods corresponding to grammar productions.
 class Parser {
 public:
-    explicit Parser(Lexer &s);
+    explicit Parser(Scanner &s);
 
     // Parse the entire program.  Returns an ASTProgram containing
     // extern declarations, global variables, struct definitions and
@@ -23,7 +23,7 @@ public:
     ASTProgram parseProgram();
 
 private:
-    Lexer &sc;
+    Scanner &sc;
     Token tok;
 
     // Advance to the next token.

@@ -2,7 +2,7 @@
 
 // Include standard library headers explicitly.  The parser makes use
 // of std::make_shared, std::vector and std::string, which are
-// transitively available via ast.hpp and lexer.hpp.  Adding the
+// transitively available via ast.hpp and scanner.hpp.  Adding the
 // headers here clarifies the dependencies and prevents compilation
 // errors on toolchains that require direct inclusion.
 #include <iostream>
@@ -14,15 +14,15 @@
 namespace cigrid {
 
 // Entry point: parse the file into an ASTProgram.  This wraps the
-// Lexer and Parser together.
+// Scanner and Parser together.
 ASTProgram parse_file(const std::string &filename) {
-    Lexer sc(filename);
+    Scanner sc(filename);
     Parser parser(sc);
     return parser.parseProgram();
 }
 
-// Parser constructor: initialise the lexer and read the first token.
-Parser::Parser(Lexer &s) : sc(s) {
+// Parser constructor: initialise the scanner and read the first token.
+Parser::Parser(Scanner &s) : sc(s) {
     tok = sc.next();
 }
 
@@ -130,10 +130,17 @@ ExternDecl Parser::parseExtern(const Type& retType, const std::string& name) {
     if (tok.type != TokenType::RParen) {
         Type t = parseType();
         paramTypes.push_back(t);
+        if (tok.type == TokenType::Ident) {
+            // Parameter name present in prototype; ignore it.
+            advance();
+        }
         while (tok.type == TokenType::Comma) {
             advance();
             t = parseType();
             paramTypes.push_back(t);
+            if (tok.type == TokenType::Ident) {
+                advance();
+            }
         }
     }
     expect(TokenType::RParen);
@@ -257,7 +264,7 @@ Ptr<Stmt> Parser::parseStmt() {
         // Save current position to decide if this is a declaration or an expression starting with an identifier.
         // We only treat it as a declaration if it's a base type or ident followed by '*' or another ident and then a variable name and optionally '='.
         // To decide, we need to parse type and then peek if next token is ident.
-        // We'll clone lexer state by using peek and not consuming tokens before committing.
+        // We'll clone scanner state by using peek and not consuming tokens before committing.
         // However since parseType consumes base and star(s), we can't easily peek.  Instead we will temporarily parse type and then check next token.
         // To avoid complexity, we'll treat any type keyword (int/char/void) as the start of a declaration.  For ident we must check if ident is a type name.
         // For simplicity we treat ident followed by pointer or another ident as declaration.  If ident followed by '(' then it's a function call; if ident followed by number or operator then it's expression.
@@ -385,6 +392,21 @@ Ptr<Stmt> Parser::parseExprOrAssignStmt() {
         // We need to check if nextTok is LBracket or Dot or Assign or PlusPlus or MinusMinus.
         // If nextTok is LBracket or Dot, we parse array access and then check for '=' or '++'/'--'.
         advance();
+        // If followed by '(', this is a function call used as a statement.
+        if (tok.type == TokenType::LParen) {
+            advance();
+            std::vector<Ptr<Expr>> args;
+            if (tok.type != TokenType::RParen) {
+                args.push_back(parseExpr());
+                while (tok.type == TokenType::Comma) {
+                    advance();
+                    args.push_back(parseExpr());
+                }
+            }
+            expect(TokenType::RParen);
+            expect(TokenType::Semicolon);
+            return std::make_shared<SExpr>(std::make_shared<ECall>(baseName, args));
+        }
         // Build left expression: either simple variable or array access
         // We'll maintain variables: bool isArray; string arrayName; Ptr<Expr> index; string field
         bool isArrayAssign = false;
@@ -882,8 +904,16 @@ ASTProgram Parser::parseProgram() {
             }
             std::string name = tok.text;
             advance();
-            ExternDecl ex = parseExtern(retType, name);
-            prog.externs.push_back(ex);
+            if (tok.type == TokenType::LParen) {
+                ExternDecl ex = parseExtern(retType, name);
+                prog.externs.push_back(ex);
+            } else {
+                expect(TokenType::Semicolon);
+                GVarDecl decl;
+                decl.type = retType;
+                decl.name = name;
+                prog.globals.push_back(decl);
+            }
             continue;
         }
         if (tok.type == TokenType::Kw_struct) {

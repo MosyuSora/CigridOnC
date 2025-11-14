@@ -207,6 +207,9 @@ std::string Scanner::readCharLiteral() {
     } else {
         result = c;
     }
+    if (result != '\0' && static_cast<unsigned char>(result) < 0x20) {
+        throw ParseError("control character in character literal", startLine);
+    }
     // expect closing quote
     if (eof() || getChar() != '\'') {
         throw ParseError("unterminated character literal", startLine);

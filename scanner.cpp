@@ -103,13 +103,18 @@ void Scanner::skipWhitespaceAndComments() {
 // the character following the backslash and returns the actual character.
 static char decodeEscape(char esc, int line) {
     switch (esc) {
+        case 'a': return '\a';
+        case 'b': return '\b';
+        case 'f': return '\f';
         case 'n': return '\n';
-        case 't': return '\t';
         case 'r': return '\r';
+        case 't': return '\t';
+        case 'v': return '\v';
         case '\\': return '\\';
         case '\'': return '\'';
         case '"': return '"';
         case '0': return '\0';
+        case '?': return '?';
         default:
             throw ParseError("invalid escape sequence", line);
     }

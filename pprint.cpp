@@ -117,9 +117,14 @@ static void printExpr(const Ptr<Expr> &e, ostream &out) {
         char c = ce->value;
         switch (c) {
         case '\\': out << "\\\\"; break;
+        case '\0': out << "\\0"; break;
+        case '\a': out << "\\a"; break;
+        case '\b': out << "\\b"; break;
+        case '\f': out << "\\f"; break;
         case '\n': out << "\\n"; break;
-        case '\t': out << "\\t"; break;
         case '\r': out << "\\r"; break;
+        case '\t': out << "\\t"; break;
+        case '\v': out << "\\v"; break;
         case '\'': out << "\\\'"; break;
         case '"': out << "\\\""; break;
         default: out << c; break;
@@ -130,9 +135,14 @@ static void printExpr(const Ptr<Expr> &e, ostream &out) {
         for (char c : se->value) {
             switch (c) {
             case '\\': out << "\\\\"; break;
+            case '\0': out << "\\0"; break;
+            case '\a': out << "\\a"; break;
+            case '\b': out << "\\b"; break;
+            case '\f': out << "\\f"; break;
             case '\n': out << "\\n"; break;
-            case '\t': out << "\\t"; break;
             case '\r': out << "\\r"; break;
+            case '\t': out << "\\t"; break;
+            case '\v': out << "\\v"; break;
             case '\'': out << "\\\'"; break;
             case '"': out << "\\\""; break;
             default: out << c; break;

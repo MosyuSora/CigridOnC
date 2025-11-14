@@ -103,13 +103,18 @@ void Scanner::skipWhitespaceAndComments() {
 // the character following the backslash and returns the actual character.
 static char decodeEscape(char esc, int line) {
     switch (esc) {
+        case 'a': return '\a';
+        case 'b': return '\b';
+        case 'f': return '\f';
         case 'n': return '\n';
-        case 't': return '\t';
         case 'r': return '\r';
+        case 't': return '\t';
+        case 'v': return '\v';
         case '\\': return '\\';
         case '\'': return '\'';
         case '"': return '"';
         case '0': return '\0';
+        case '?': return '?';
         default:
             throw ParseError("invalid escape sequence", line);
     }
@@ -194,6 +199,7 @@ std::string Scanner::readCharLiteral() {
         throw ParseError("newline in character literal", startLine);
     }
     char result;
+    bool escaped = false;
     if (c == '\\') {
         // escape sequence
         if (eof()) {
@@ -204,10 +210,11 @@ std::string Scanner::readCharLiteral() {
             throw ParseError("unterminated character literal", startLine);
         }
         result = decodeEscape(esc, startLine);
+        escaped = true;
     } else {
         result = c;
     }
-    if (result != '\0' && static_cast<unsigned char>(result) < 0x20) {
+    if (!escaped && result != '\0' && static_cast<unsigned char>(result) < 0x20) {
         throw ParseError("control character in character literal", startLine);
     }
     // expect closing quote

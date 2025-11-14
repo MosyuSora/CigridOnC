@@ -21,11 +21,11 @@ void pprint(const ASTProgram &prog) {
         cout << "GFuncDecl(";
         printType(ex.type, cout);
         cout << ", \"" << ex.name << "\", {";
-        for (size_t i = 0; i < ex.paramTypes.size(); i++) {
+        for (size_t i = 0; i < ex.params.size(); i++) {
             cout << "(";
-            printType(ex.paramTypes[i], cout);
-            cout << ")";
-            if (i + 1 < ex.paramTypes.size())
+            printType(ex.params[i].type, cout);
+            cout << ", \"" << ex.params[i].name << "\")";
+            if (i + 1 < ex.params.size())
                 cout << " ";
         }
         cout << "})" << endl << endl;

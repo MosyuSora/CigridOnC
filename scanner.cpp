@@ -119,7 +119,7 @@ static char decodeEscape(char esc, int line) {
 // 0X it is parsed as a hex literal.  Otherwise it is decimal.  Returns a
 // string containing the lexeme.  The scanner does not convert to a number
 // here; the parser will handle numeric conversion.
-std::string Scanner::readNumber() {
+std::string Scanner::readNumber(int startLine) {
     std::string num;
     // handle hex prefix 0x or 0X
     if (peekChar() == '0' && pos + 1 < data.size() && (data[pos + 1] == 'x' || data[pos + 1] == 'X')) {
@@ -135,6 +135,9 @@ std::string Scanner::readNumber() {
                 break;
             }
         }
+        if (num.size() == 2) {
+            throw ParseError("missing digits in hexadecimal literal", startLine);
+        }
         return num;
     }
     // decimal digits
@@ -145,6 +148,12 @@ std::string Scanner::readNumber() {
         } else {
             break;
         }
+    }
+    if (num.empty()) {
+        throw ParseError("invalid integer literal", startLine);
+    }
+    if (num.size() > 1 && num[0] == '0') {
+        throw ParseError("leading zero in integer literal", startLine);
     }
     return num;
 }
@@ -272,7 +281,7 @@ Token Scanner::next() {
     }
     // numbers
     if (c >= '0' && c <= '9') {
-        std::string num = readNumber();
+        std::string num = readNumber(tokLine);
         return Token(TokenType::Number, num, tokLine);
     }
     // character literal

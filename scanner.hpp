@@ -1,7 +1,9 @@
 #pragma once
 
+#include <exception>
 #include <string>
 #include <stdexcept>
+#include <utility>
 
 namespace cigrid {
 
@@ -72,9 +74,13 @@ enum class TokenType {
 // original lexeme text (useful for identifiers and numbers) and the line
 // number where the token occurred.  The line number starts at 1.
 struct Token {
-    TokenType type;
+    TokenType type = TokenType::End;
     std::string text;
-    int line;
+    int line = 0;
+
+    Token() = default;
+    Token(TokenType t, std::string txt, int ln)
+        : type(t), text(std::move(txt)), line(ln) {}
 };
 
 // Exception type thrown by the scanner and parser on errors.  It

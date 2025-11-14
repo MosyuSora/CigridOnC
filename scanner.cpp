@@ -193,9 +193,6 @@ std::string Scanner::readCharLiteral() {
     if (c == '\n' || c == '\r') {
         throw ParseError("newline in character literal", startLine);
     }
-    if (static_cast<unsigned char>(c) < 0x20) {
-        throw ParseError("control character in character literal", startLine);
-    }
     char result;
     if (c == '\\') {
         // escape sequence

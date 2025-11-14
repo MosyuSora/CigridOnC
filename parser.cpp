@@ -1,7 +1,15 @@
 #include "parser.hpp"
 
+// Include standard library headers explicitly.  The parser makes use
+// of std::make_shared, std::vector and std::string, which are
+// transitively available via ast.hpp and lexer.hpp.  Adding the
+// headers here clarifies the dependencies and prevents compilation
+// errors on toolchains that require direct inclusion.
 #include <iostream>
 #include <stdexcept>
+#include <memory>
+#include <string>
+#include <vector>
 
 namespace cigrid {
 

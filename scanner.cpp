@@ -1,4 +1,4 @@
-#include "lexer.hpp"
+#include "scanner.hpp"
 
 #include <fstream>
 #include <sstream>
@@ -7,10 +7,10 @@
 
 namespace cigrid {
 
-// Construct a lexer by reading an entire file into memory.  If the file
-// cannot be opened an exception is thrown.  The lexer maintains a
+// Construct a scanner by reading an entire file into memory.  If the file
+// cannot be opened an exception is thrown.  The scanner maintains a
 // position pointer into the string and a current line counter.
-Lexer::Lexer(const std::string &filename) {
+Scanner::Scanner(const std::string &filename) {
     std::ifstream in(filename);
     if (!in.is_open()) {
         throw ParseError("cannot open file", 0);
@@ -24,18 +24,18 @@ Lexer::Lexer(const std::string &filename) {
 }
 
 // Check if we have reached end of the file buffer.
-bool Lexer::eof() const { return pos >= data.size(); }
+bool Scanner::eof() const { return pos >= data.size(); }
 
 // Peek at the current character without consuming it.  Returns '\0' if at
 // end of file.
-char Lexer::peekChar() const {
+char Scanner::peekChar() const {
     if (eof()) return '\0';
     return data[pos];
 }
 
 // Consume the current character and return it.  Also updates the line
 // counter on newline.
-char Lexer::getChar() {
+char Scanner::getChar() {
     if (eof()) return '\0';
     char c = data[pos++];
     if (c == '\n') line++;
@@ -46,7 +46,7 @@ char Lexer::getChar() {
 // Handles single line comments starting with '#', '//' and multi‑line
 // comments starting with '/*' and ending with '*/'.  Updates the line
 // counter accordingly.
-void Lexer::skipWhitespaceAndComments() {
+void Scanner::skipWhitespaceAndComments() {
     while (!eof()) {
         char c = peekChar();
         // whitespace
@@ -65,7 +65,7 @@ void Lexer::skipWhitespaceAndComments() {
         }
         // C++ style single line comment '//'
         if (c == '/' && pos + 1 < data.size() && data[pos + 1] == '/') {
-            // consume '//'
+            // consume '//' then skip until newline
             getChar(); // '/'
             getChar(); // '/'
             while (!eof() && peekChar() != '\n') {
@@ -113,9 +113,9 @@ static char decodeEscape(char esc) {
 
 // Read a numeric literal (decimal or hexadecimal).  If it starts with 0x or
 // 0X it is parsed as a hex literal.  Otherwise it is decimal.  Returns a
-// string containing the lexeme.  The lexer does not convert to a number
+// string containing the lexeme.  The scanner does not convert to a number
 // here; the parser will handle numeric conversion.
-std::string Lexer::readNumber() {
+std::string Scanner::readNumber() {
     std::string num;
     // handle hex prefix 0x or 0X
     if (peekChar() == '0' && pos + 1 < data.size() && (data[pos + 1] == 'x' || data[pos + 1] == 'X')) {
@@ -148,7 +148,7 @@ std::string Lexer::readNumber() {
 // Read an identifier or keyword.  Identifiers start with a letter or
 // underscore and may contain letters, digits or underscores.  Returns the
 // lexeme.
-std::string Lexer::readIdent() {
+std::string Scanner::readIdent() {
     std::string id;
     char c = getChar();
     id += c;
@@ -166,7 +166,7 @@ std::string Lexer::readIdent() {
 // Read a character literal.  Assumes the current character is the opening
 // single quote.  Returns the decoded character.  Throws on malformed
 // literals.
-std::string Lexer::readCharLiteral() {
+std::string Scanner::readCharLiteral() {
     // consume opening quote
     getChar();
     if (eof()) {
@@ -194,7 +194,7 @@ std::string Lexer::readCharLiteral() {
 // Read a string literal.  Assumes the current character is the opening
 // double quote.  Returns the decoded string (without the surrounding
 // quotes).  Throws on malformed strings.
-std::string Lexer::readStringLiteral() {
+std::string Scanner::readStringLiteral() {
     // consume opening quote
     getChar();
     std::string out;
@@ -219,7 +219,7 @@ std::string Lexer::readStringLiteral() {
 
 // Main function to get the next token.  Uses internal peek buffer to
 // implement lookahead.  Throws ParseError on invalid characters.
-Token Lexer::next() {
+Token Scanner::next() {
     if (hasPeek) {
         hasPeek = false;
         return peekToken;
@@ -347,7 +347,7 @@ Token Lexer::next() {
 
 // Peek at the next token without consuming it.  If there is no cached
 // token we call next() and save it.
-Token Lexer::peek() {
+Token Scanner::peek() {
     if (!hasPeek) {
         peekToken = next();
         hasPeek = true;

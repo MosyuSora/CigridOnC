@@ -194,6 +194,7 @@ std::string Scanner::readCharLiteral() {
         throw ParseError("newline in character literal", startLine);
     }
     char result;
+    bool escaped = false;
     if (c == '\\') {
         // escape sequence
         if (eof()) {
@@ -204,10 +205,11 @@ std::string Scanner::readCharLiteral() {
             throw ParseError("unterminated character literal", startLine);
         }
         result = decodeEscape(esc, startLine);
+        escaped = true;
     } else {
         result = c;
     }
-    if (result != '\0' && static_cast<unsigned char>(result) < 0x20) {
+    if (!escaped && result != '\0' && static_cast<unsigned char>(result) < 0x20) {
         throw ParseError("control character in character literal", startLine);
     }
     // expect closing quote

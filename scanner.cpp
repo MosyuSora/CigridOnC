@@ -75,17 +75,22 @@ void Scanner::skipWhitespaceAndComments() {
         }
         // C style multi‑line comment '/* ... */'
         if (c == '/' && pos + 1 < data.size() && data[pos + 1] == '*') {
+            int startLine = line;
             // consume '/*'
             getChar();
             getChar();
+            bool closed = false;
             // skip until '*/'
             while (!eof()) {
-                if (peekChar() == '*' && pos + 1 < data.size() && data[pos + 1] == '/') {
-                    getChar(); // '*'
-                    getChar(); // '/'
+                char inner = getChar();
+                if (inner == '*' && !eof() && peekChar() == '/') {
+                    getChar(); // consume '/'
+                    closed = true;
                     break;
                 }
-                getChar();
+            }
+            if (!closed) {
+                throw ParseError("unterminated comment", startLine);
             }
             continue;
         }
@@ -96,7 +101,7 @@ void Scanner::skipWhitespaceAndComments() {
 
 // Helper to convert escape sequences in a character or string literal.  Takes
 // the character following the backslash and returns the actual character.
-static char decodeEscape(char esc) {
+static char decodeEscape(char esc, int line) {
     switch (esc) {
         case 'n': return '\n';
         case 't': return '\t';
@@ -106,8 +111,7 @@ static char decodeEscape(char esc) {
         case '"': return '"';
         case '0': return '\0';
         default:
-            // Unknown escape, just return the character itself
-            return esc;
+            throw ParseError("invalid escape sequence", line);
     }
 }
 
@@ -168,25 +172,35 @@ std::string Scanner::readIdent() {
 // literals.
 std::string Scanner::readCharLiteral() {
     // consume opening quote
+    int startLine = line;
     getChar();
     if (eof()) {
-        throw ParseError("unterminated character literal", line);
+        throw ParseError("unterminated character literal", startLine);
     }
     char c = getChar();
+    if (c == '"') {
+        throw ParseError("unescaped double quote in character literal", startLine);
+    }
+    if (c == '\n' || c == '\r') {
+        throw ParseError("newline in character literal", startLine);
+    }
     char result;
     if (c == '\\') {
         // escape sequence
         if (eof()) {
-            throw ParseError("unterminated character literal", line);
+            throw ParseError("unterminated character literal", startLine);
         }
         char esc = getChar();
-        result = decodeEscape(esc);
+        if (esc == '\n' || esc == '\r') {
+            throw ParseError("unterminated character literal", startLine);
+        }
+        result = decodeEscape(esc, startLine);
     } else {
         result = c;
     }
     // expect closing quote
     if (eof() || getChar() != '\'') {
-        throw ParseError("unterminated character literal", line);
+        throw ParseError("unterminated character literal", startLine);
     }
     return std::string(1, result);
 }
@@ -196,6 +210,7 @@ std::string Scanner::readCharLiteral() {
 // quotes).  Throws on malformed strings.
 std::string Scanner::readStringLiteral() {
     // consume opening quote
+    int startLine = line;
     getChar();
     std::string out;
     while (!eof()) {
@@ -204,17 +219,23 @@ std::string Scanner::readStringLiteral() {
             // end of string
             return out;
         }
+        if (c == '\n' || c == '\r') {
+            throw ParseError("unterminated string literal", startLine);
+        }
         if (c == '\\') {
             if (eof()) {
-                throw ParseError("unterminated string literal", line);
+                throw ParseError("unterminated string literal", startLine);
             }
             char esc = getChar();
-            out.push_back(decodeEscape(esc));
+            if (esc == '\n' || esc == '\r') {
+                throw ParseError("unterminated string literal", startLine);
+            }
+            out.push_back(decodeEscape(esc, startLine));
         } else {
             out.push_back(c);
         }
     }
-    throw ParseError("unterminated string literal", line);
+    throw ParseError("unterminated string literal", startLine);
 }
 
 // Main function to get the next token.  Uses internal peek buffer to

@@ -229,7 +229,7 @@ struct FuncDef {
 struct ExternDecl {
     Type type;
     std::string name;
-    std::vector<Type> paramTypes;
+    std::vector<FuncParam> params;
 };
 
 // Global variable declaration (no initializer)

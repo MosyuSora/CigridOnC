@@ -1,0 +1,13 @@
+CC := g++
+CXXFLAGS := -std=c++17 -O2 -Wall -Wextra -pedantic
+
+SRC := main.cpp lexer.cpp parser.cpp pprint.cpp
+TARGET := cigrid
+
+all: $(TARGET)
+
+$(TARGET): $(SRC)
+	$(CC) $(CXXFLAGS) -o $@ $^
+
+clean:
+	rm -f $(TARGET) *.o

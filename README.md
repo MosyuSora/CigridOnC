@@ -68,11 +68,13 @@ This compiles all `.cpp` files into a single executable named `cigrid` using `g+
 To run the compiler on a source file:
 
 ```sh
-./cigrid [--pretty-print] [--line-error] source.c
+./cigrid [--pretty-print] [--line-error] [--asm] [--compile] source.c
 ```
 
 * `--pretty-print` causes the program to print the constructed AST to standard output in the canonical format described above.  If omitted, the program performs only syntax checking and exits quietly on success.
 * `--line-error` changes the error reporting mode: on the first lexical or syntax error the program writes only the line number to standard error and exits with code 1.  Without this flag, a descriptive error message (including line number) is printed.  This behaviour satisfies the Good‑level specification【413910581251483†L310-L329】.
+* `--asm` lowers straight‑line `int main()` programs into a simple linear IR and emits NASM‑compatible x86‑64 assembly, always declaring `global main` and using a stack frame built with `sub rsp, N`/`add rsp, N`.
+* `--compile` is a convenience flag that requires `--asm`; after printing the assembly it invokes `nasm -felf64` followed by `gcc -no-pie` to produce an executable named after the input stem.
 * Providing an unknown flag results in exit code 1 and a short usage error.
 
 The return codes are:
